@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            background-color: black;
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="1024" height="768"></canvas>
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const snakeBodySize = 20;
+        const initialSnakeSpeed = 5;
+        const initialSnakeLength = 3;
+        const appleSize = 20;
+        const triangleSide = 30;
+        let snakeX = canvas.width / 2;
+        let snakeY = canvas.height / 2;
+        let snakeSpeedX = initialSnakeSpeed;
+        let snakeSpeedY = 0;
+        let snakeLength = initialSnakeLength;
+        let snakeBody = [];
+        let mouseSpeed = 2;
+        let isMouseClicked = false;
+        let obstacles = [];
+        let apples = [];
+        let score = 0;
+        let gameInterval;
+        let startTime = new Date();
+
+        class Obstacle {
+            constructor(x, y, shape, speed, rotation, direction) {
+                this.x = x;
+                this.y = y;
+                this.shape = shape;
+                this.speed = speed;
+                this.rotation = rotation;
+                this.direction = direction;
+            }
+
+            move() {
+                this.x += Math.cos(this.direction) * this.speed;
+                this.y += Math.sin(this.direction) * this.speed;
+                this.rotation += 0.15;
+            }
+        }
+
+        function updateSnakeDirection(x, y) {
+            snakeSpeedX = x;
+            snakeSpeedY = y;
+        }
+
+        canvas.addEventListener("mousemove", (e) => {
+            if (!isMouseClicked) {
+                const mouseX = e.clientX - canvas.getBoundingClientRect().left;
+                const mouseY = e.clientY - canvas.getBoundingClientRect().top;
+                const directionX = mouseX - snakeX;
+                const directionY = mouseY - snakeY;
+                const distance = Math.sqrt(directionX * directionX + directionY * directionY);
+                const normalizedDirectionX = directionX / distance;
+                const normalizedDirectionY = directionY / distance;
+                updateSnakeDirection(normalizedDirectionX * initialSnakeSpeed, normalizedDirectionY * initialSnakeSpeed);
+            }
+        });
+
+        canvas.addEventListener("mousedown", () => {
+            isMouseClicked = true;
+            updateSnakeDirection(snakeSpeedX * mouseSpeed, snakeSpeedY * mouseSpeed);
+        });
+
+        canvas.addEventListener("mouseup", () => {
+            isMouseClicked = false;
+            updateSnakeDirection(snakeSpeedX / mouseSpeed, snakeSpeedY / mouseSpeed);
+        });
+
+        function createApple() {
+            const appleX = Math.floor(Math.random() * (canvas.width / appleSize)) * appleSize;
+            const appleY = Math.floor(Math.random() * (canvas.height / appleSize)) * appleSize;
+            apples.push({ x: appleX, y: appleY });
+        }
+
+        function createObstacle() {
+            const obstacleX = canvas.width + snakeBodySize;
+            const obstacleY = Math.random() * canvas.height;
+            const shape = Math.random() < 0.5 ? "circle" : Math.random() < 0.5 ? "triangle" : "rectangle";
+            const speed = Math.random() * 5 + 2;
+            const rotation = Math.random() * (2 * Math.PI);
+            const direction = Math.random() * (2 * Math.PI);
+            const obstacle = new Obstacle(obstacleX, obstacleY, shape, speed, rotation, direction);
+            obstacles.push(obstacle);
+        }
+
+        function drawSnake() {
+            ctx.fillStyle = "green";
+            for (let i = 0; i < snakeBody.length; i++) {
+                const bodyX = snakeBody[i].x + (i === 0 ? 0 : (i % 3) * 2);
+                const bodyY = snakeBody[i].y + (i === 0 ? 0 : (i % 3) * 2);
+                ctx.beginPath();
+                ctx.arc(bodyX, bodyY, snakeBodySize / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            const headX = snakeX;
+            const headY = snakeY;
+            const eyeSize = 4;
+            const eyeOffsetX = 8;
+            const eyeOffsetY = 4;
+
+            ctx.fillStyle = "white";
+            ctx.beginPath();
+            ctx.arc(headX - eyeOffsetX, headY - eyeOffsetY, eyeSize, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(headX + eyeOffsetX, headY - eyeOffsetY, eyeSize, 0, Math.PI * 2);
+            ctx.fill();
+
+            snakeBody.unshift({ x: snakeX, y: snakeY });
+            if (snakeBody.length > snakeLength) {
+                snakeBody.pop();
+            }
+        }
+
+        function drawApples() {
+            ctx.fillStyle = "red";
+            for (let i = 0; i < apples.length; i++) {
+                ctx.beginPath();
+                ctx.arc(apples[i].x + appleSize / 2, apples[i].y + appleSize / 2, appleSize / 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (
+                    snakeX < apples[i].x + appleSize &&
+                    snakeX + snakeBodySize > apples[i].x &&
+                    snakeY < apples[i].y + appleSize &&
+                    snakeY + snakeBodySize > apples[i].y
+                ) {
+                    apples.splice(i, 1);
+                    i++;
+                    snakeLength++;
+                    score++;
+                }
+            }
+        }
+
+        function drawObstacles() {
+            for (let i = 0; i < obstacles.length; i++) {
+                const obstacle = obstacles[i];
+                ctx.fillStyle = obstacle.shape === "circle" ? "yellow" : "blue";
+
+                const obstacleX = obstacle.x;
+                const obstacleY = obstacle.y;
+
+                if (obstacle.shape === "circle") {
+                    ctx.beginPath();
+                    ctx.arc(obstacleX, obstacleY, snakeBodySize / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (obstacle.shape === "triangle") {
+                    ctx.save();
+                    ctx.translate(obstacleX, obstacleY);
+                    ctx.rotate(obstacle.rotation);
+                    ctx.beginPath();
+                    ctx.moveTo(0, -triangleSide / 2);
+                    ctx.lineTo(-triangleSide / 2, triangleSide / 2);
+                    ctx.lineTo(triangleSide / 2, triangleSide / 2);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                } else if (obstacle.shape === "rectangle") {
+                    ctx.save();
+                    ctx.translate(obstacleX, obstacleY);
+                    ctx.rotate(obstacle.rotation);
+                    ctx.fillRect(-snakeBodySize / 2, -snakeBodySize / 2, snakeBodySize, snakeBodySize);
+                    ctx.restore();
+                }
+
+                moveObstacle(obstacle);
+
+                if (
+                    snakeX < obstacleX + snakeBodySize &&
+                    snakeX + snakeBodySize > obstacleX &&
+                    snakeY < obstacleY + snakeBodySize &&
+                    snakeY + snakeBodySize > obstacleY
+                ) {
+                    clearInterval(gameInterval);
+                    alert("Game Over!");
+                }
+            }
+        }
+
+        function moveObstacle(obstacle) {
+            obstacle.move();
+            obstacle.x -= obstacle.speed;
+        }
+
+        function handleObstacleCollisions() {
+            for (let i = 0; i < obstacles.length; i++) {
+                for (let j = i + 1; j < obstacles.length; j++) {
+                if (
+                    Math.abs(obstacles[i].x - obstacles[j].x) < snakeBodySize &&
+                    Math.abs(obstacles[i].y - obstacles[j].y) < snakeBodySize 
+                ) {
+                    obstacles[i].direction += Math.PI / 2;
+                    obstacles[i].speed *= 1.15;
+                    obstacles[j].direction += Math.PI / 2;
+                    obstacles[j].speed *= 1.15;
+                }
+            }
+        }
+    }
+
+        function updateGameArea() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawSnake();
+            drawApples();
+            drawObstacles();
+            handleObstacleCollisions();
+
+            if (snakeX < 0 || snakeX > canvas.width || snakeY < 0 || snakeY > canvas.height) {
+                clearInterval(gameInterval);
+                alert("Game Over!");
+            }
+
+            if (Math.random() < 0.03) {
+                createObstacle();
+            }
+
+            const currentTime = new Date();
+            const elapsedTime = Math.floor((currentTime - startTime) / 1000);
+
+            ctx.fillStyle = "white";
+            ctx.fillText(`Time: ${elapsedTime} seconds`, 10, 20);
+            ctx.fillText(`Snake Length: ${snakeLength}`, 10, 40);
+            ctx.fillText(`Score: ${score}`, 10, 60);
+
+            snakeX += snakeSpeedX;
+            snakeY += snakeSpeedY;
+
+            while (apples.length < 3) {
+                createApple();
+            }
+        }
+
+        for (let i = 0; i < 3; i++) {
+            createApple();
+        }
+        gameInterval = setInterval(updateGameArea, 20);
+    </script>
+</body>
+</html>
