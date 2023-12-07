@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  canvas {
+    border: 1px solid #000;
+  }
+  .transform-info {
+    position: absolute;
+    top: 10px;
+    left: 410px;
+  }
+  .input-field {
+    width: 60px;
+    margin-right: 10px;
+  }
+  .btn {
+    display: flex;
+    font-size: 17px;
+    margin: 5px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<canvas id="myCanvas" width="400" height="400"></canvas>
+<div class="transform-info">
+  <h3>Transform</h3>
+  <p>Position (x, y, z):
+    <input class="input-field" type="text" id="positionX">
+    <input class="input-field" type="text" id="positionY">
+    <input class="input-field" type="text" id="positionZ">
+  </p>
+  <p>Rotation (x, y, z):
+    <input class="input-field" type="text" id="rotationX">
+    <input class="input-field" type="text" id="rotationY">
+    <input class="input-field" type="text" id="rotationZ">
+  </p>
+  <p>Scale (x, y, z):
+    <input class="input-field" type="text" id="scaleX">
+    <input class="input-field" type="text" id="scaleY">
+    <input class="input-field" type="text" id="scaleZ">
+  </p>
+  <h4>하트의 회전은 마우스 휠로 회전 가능합니다.</h4>
+    <button id="drawHeartButton" class="btn">Draw Heart</button> 
+    <button id="undoButton" class="btn">Undo</button>
+    <button id="redoButton" class="btn">Redo</button>
+</div>
+
+<script>
+var canvas = document.getElementById("myCanvas");
+var ctx = canvas.getContext("2d");
+var heart = null;
+
+var positionXInput = document.getElementById("positionX");
+var positionYInput = document.getElementById("positionY");
+var positionZInput = document.getElementById("positionZ");
+var rotationXInput = document.getElementById("rotationX");
+var rotationYInput = document.getElementById("rotationY");
+var rotationZInput = document.getElementById("rotationZ");
+var scaleXInput = document.getElementById("scaleX");
+var scaleYInput = document.getElementById("scaleY");
+var scaleZInput = document.getElementById("scaleZ");
+
+positionXInput.addEventListener("input", updateHeartPosition);
+positionYInput.addEventListener("input", updateHeartPosition);
+positionZInput.addEventListener("input", updateHeartPosition);
+rotationXInput.addEventListener("input", updateHeartRotation);
+rotationYInput.addEventListener("input", updateHeartRotation);
+rotationZInput.addEventListener("input", updateHeartRotation);
+scaleXInput.addEventListener("input", updateHeartScale);
+scaleYInput.addEventListener("input", updateHeartScale);
+scaleZInput.addEventListener("input", updateHeartScale);
+
+var drawHeartButton = document.getElementById("drawHeartButton");
+drawHeartButton.addEventListener("click", function() {
+  if (heart === null) {
+    heart = {
+      x: 150,
+      y: 150,
+      z: 0,
+      size: 100,
+      isDragging: false,
+      dragOffsetX: 0,
+      dragOffsetY: 0,
+      resizeHandleRadius: 5,
+      resizeHandleDiameter: 2 * 5,
+      clickedResizeHandle: "",
+      rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+      },
+      scale: {
+        x: 1,
+        y: 1,
+        z: 1
+      }
+    };
+    updateTransformInputs();
+    draw();
+  }
+});
+
+var undoButton = document.getElementById("undoButton");
+undoButton.addEventListener("click", function() {
+  heart = null;
+  clearCanvas();
+  updateTransformInputs();
+});
+
+var redoButton = document.getElementById("redoButton");
+redoButton.addEventListener("click", function() {
+  if (heart !== null) {
+    heart = {
+      x: 150,
+      y: 150,
+      z: 0,
+      size: 100,
+      isDragging: false,
+      dragOffsetX: 0,
+      dragOffsetY: 0,
+      resizeHandleRadius: 5,
+      resizeHandleDiameter: 2 * 5,
+      clickedResizeHandle: "",
+      rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+      },
+      scale: {
+        x: 1,
+        y: 1,
+        z: 1
+      }
+    };
+    updateTransformInputs();
+    draw();
+  }
+});
+
+canvas.addEventListener("mousedown", function(event) {
+  if (heart !== null) {
+    var mouseX = event.clientX - canvas.getBoundingClientRect().left;
+    var mouseY = event.clientY - canvas.getBoundingClientRect().top;
+
+    if (
+      (mouseX >= heart.x - heart.resizeHandleRadius && mouseX <= heart.x + heart.resizeHandleRadius) &&
+      (mouseY >= heart.y - heart.resizeHandleRadius && mouseY <= heart.y + heart.resizeHandleRadius)
+    ) {
+      heart.isDragging = true;
+      heart.clickedResizeHandle = "topLeft";
+    } else {
+      heart.isDragging = false;
+      heart.clickedResizeHandle = "";
+    }
+
+    var centerX = heart.x + heart.size / 2;
+    var centerY = heart.y + heart.size / 4;
+    var deltaX = centerX - mouseX;
+    var deltaY = centerY - mouseY;
+    var distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    if (distance <= heart.size / 4) {
+      heart.isDragging = true;
+      heart.dragOffsetX = mouseX - heart.x;
+      heart.dragOffsetY = mouseY - heart.y;
+    }
+  }
+});
+
+canvas.addEventListener("mousemove", function(event) {
+  if (heart.isDragging) {
+    var mouseX = event.clientX - canvas.getBoundingClientRect().left;
+    var mouseY = event.clientY - canvas.getBoundingClientRect().top;
+
+    if (heart.clickedResizeHandle === "topLeft") {
+      heart.size = heart.x + heart.size - mouseX;
+      heart.x = mouseX;
+      heart.y = mouseY;
+    } else {
+
+      heart.x = mouseX - heart.dragOffsetX;
+      heart.y = mouseY - heart.dragOffsetY;
+    }
+
+    heart.scale.x = heart.size / 100;
+    heart.scale.y = heart.size / 100;
+
+    draw();
+    updateTransformInputs();
+  }
+});
+
+canvas.addEventListener("mousedown", function(event) {
+  if (heart !== null) {
+    var mouseX = event.clientX - canvas.getBoundingClientRect().left;
+    var mouseY = event.clientY - canvas.getBoundingClientRect().top;
+
+    if (
+      (mouseX >= heart.x - heart.resizeHandleRadius && mouseX <= heart.x + heart.resizeHandleRadius) &&
+      (mouseY >= heart.y - heart.resizeHandleRadius && mouseY <= heart.y + heart.resizeHandleRadius)
+    ) {
+      heart.isDragging = true;
+      heart.clickedResizeHandle = "topLeft";
+    } else {
+      heart.isDragging = false;
+      heart.clickedResizeHandle = "";
+    }
+    var centerX = heart.x + heart.size / 2;
+    var centerY = heart.y + heart.size / 4;
+    var deltaX = centerX - mouseX;
+    var deltaY = centerY - mouseY;
+    var distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    if (distance <= heart.resizeHandleRadius) {
+      heart.isDragging = true;
+      heart.dragOffsetX = mouseX - heart.x;
+      heart.dragOffsetY = mouseY - heart.y;
+    } else {
+      heart.isDragging = true;
+      heart.dragOffsetX = 0;
+      heart.dragOffsetY = 0;
+    }
+  }
+});
+
+canvas.addEventListener("mouseup", function() {
+  if (heart !== null) {
+    heart.isDragging = false;
+  }
+});
+
+canvas.addEventListener("wheel", function(event) {
+  if (heart !== null) {
+    var mouseX = event.clientX - canvas.getBoundingClientRect().left;
+    var mouseY = event.clientY - canvas.getBoundingClientRect().top;
+
+    var rotationStep = 10 * (Math.PI / 180);
+    if (event.deltaY < 0) {
+      heart.rotation.z += rotationStep;
+    } else {
+      heart.rotation.z -= rotationStep;
+    }
+    draw();
+    updateTransformInputs();
+  }
+});
+
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function updateTransformInputs() {
+  if (heart !== null) {
+    positionXInput.value = heart.x;
+    positionYInput.value = heart.y;
+    positionZInput.value = heart.z;
+    rotationXInput.value = heart.rotation.x;
+    rotationYInput.value = heart.rotation.y;
+    rotationZInput.value = heart.rotation.z;
+    scaleXInput.value = heart.scale.x;
+    scaleYInput.value = heart.scale.y;
+    scaleZInput.value = heart.scale.z;
+  } else {
+    positionXInput.value = "";
+    positionYInput.value = "";
+    positionZInput.value = "";
+    rotationXInput.value = "";
+    rotationYInput.value = "";
+    rotationZInput.value = "";
+    scaleXInput.value = "";
+    scaleYInput.value = "";
+    scaleZInput.value = "";
+  }
+}
+
+function updateHeartPosition() {
+  if (heart !== null) {
+    heart.x = parseFloat(positionXInput.value) || 0;
+    heart.y = parseFloat(positionYInput.value) || 0;
+    heart.z = parseFloat(positionZInput.value) || 0;
+    draw();
+  }
+}
+
+function updateHeartRotation() {
+  if (heart !== null) {
+    heart.rotation.x = parseFloat(rotationXInput.value) || 0;
+    heart.rotation.y = parseFloat(rotationYInput.value) || 0;
+    heart.rotation.z = parseFloat(rotationZInput.value) || 0;
+    draw();
+  }
+}
+
+function updateHeartScale() {
+  if (heart !== null) {
+    heart.scale.x = Math.max(parseFloat(scaleXInput.value) || 1, 0.1);
+    heart.scale.y = Math.max(parseFloat(scaleYInput.value) || 1, 0.1);
+    heart.scale.z = Math.max(parseFloat(scaleZInput.value) || 1, 0.1);
+
+    if (heart.scale.x < 0 || heart.scale.y < 0 || heart.scale.z < 0) {
+
+      heart.scale.x = prevScaleX;
+      heart.scale.y = prevScaleY;
+      heart.scale.z = prevScaleZ;
+    }
+    heart.size = 100 * Math.max(heart.scale.x, heart.scale.y)
+    draw();
+  }
+}
+
+function hwMatrixMultiply(mat1, mat2) {
+  var result = [];
+  for (var i = 0; i < mat1.length; i++) {
+    result[i] = [];
+    for (var j = 0; j < mat2[0].length; j++) {
+      var sum = 0;
+      for (var k = 0; k < mat1[0].length; k++) {
+        sum += mat1[i][k] * mat2[k][j];
+      }
+      result[i][j] = sum;
+    }
+  }
+  return result;
+}
+
+function hwTranslationMatrix(x, y) {
+  return [
+    [1, 0, x],
+    [0, 1, y],
+    [0, 0, 1]
+  ];
+}
+
+function hwScaleMatrix(x, y) {
+  return [
+    [x, 0, 0],
+    [0, y, 0],
+    [0, 0, 1]
+  ];
+}
+
+function hwRotationMatrix(angle) {
+  var radian = angle * (Math.PI / 180);
+  var cos = Math.cos(radian);
+  var sin = Math.sin(radian);
+  
+  return [
+    [cos, -sin, 0],
+    [sin, cos, 0],
+    [0, 0, 1]
+  ];
+}
+
+function draw() {
+  clearCanvas();
+
+  if (heart !== null) {
+    ctx.save();
+    ctx.translate(heart.x, heart.y); 
+    ctx.rotate(heart.rotation.z); 
+    ctx.scale(heart.scale.x, heart.scale.y);
+    ctx.translate(-heart.x, -heart.y); 
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.moveTo(heart.x, heart.y + heart.size / 4);
+    ctx.quadraticCurveTo(heart.x, heart.y, heart.x + heart.size / 4, heart.y);
+    ctx.quadraticCurveTo(heart.x + heart.size / 2, heart.y, heart.x + heart.size / 2, heart.y + heart.size / 4);
+    ctx.quadraticCurveTo(heart.x + heart.size / 2, heart.y, heart.x + heart.size * 3 / 4, heart.y);
+    ctx.quadraticCurveTo(heart.x + heart.size, heart.y, heart.x + heart.size, heart.y + heart.size / 4);
+    ctx.quadraticCurveTo(heart.x + heart.size, heart.y + heart.size / 2, heart.x + heart.size / 2, heart.y + heart.size);
+    ctx.quadraticCurveTo(heart.x, heart.y + heart.size / 2, heart.x, heart.y + heart.size / 4);
+    ctx.fill();
+
+    ctx.fillStyle = "green";
+    ctx.beginPath();
+    ctx.arc(heart.x, heart.y, heart.resizeHandleRadius, 0, 2 * Math.PI);
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+updateTransformInputs();
+</script>
+</body>
+</html>
